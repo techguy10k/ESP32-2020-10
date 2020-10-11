@@ -43,24 +43,24 @@ void initBMI160()  //初始化
   //set interrput number to int1 or int2
   if (bmi160.setInt(int2) != BMI160_OK){
     Serial.println("set interrput fail");
-    while(1);
+    // while(1);
   }
 
   //set the bmi160 mode to step counter
   if (bmi160.setStepCounter() != BMI160_OK){
     Serial.println("set step fail");
-    while(1);
+    // while(1);
   }
   
   //set the bmi160 power model,contains:stepNormalPowerMode,stepLowPowerMode
   if (bmi160.setStepPowerMode(bmi160.stepNormalPowerMode) != BMI160_OK){
     Serial.println("set setStepPowerMode fail");
-    while(1);
+    // while(1);
   }
 
   attachInterrupt(pbIn, stepChange, FALLING);
 
-  Serial.println(pbIn);
+  // Serial.println(pbIn);
 }
 
 
@@ -227,7 +227,7 @@ void setup()
 void loop()
 {
   
-
+  // Serial.printf("fuck\r\n");
   if ((digitalRead(ADS1292_DRDY_PIN)) == LOW)      // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
   {
     SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
@@ -303,9 +303,9 @@ void loop()
       }
       time_elapsed += 1000;
     }
-
+Serial.printf("hello\r\n");
     PakageUpdate();
-    // PakageTestSend();
+    PakageTestSend();
     // PakageTcpSend();
     PakageUdpSend();
     
@@ -315,6 +315,10 @@ void loop()
 
   ads1292dataReceived = false;
   SPI_RX_Buff_Count = 0;
+
+  // PakageUpdate();
+  PakageTestSend();
+
 
   // delay(500);
 
@@ -677,13 +681,28 @@ void LMT70_GetTemp(void)
 
 void PakageUpdate(void)
 {
+  uint16_t stepCounter = 0;
+
   //第一个陀螺仪
   Pakage[0] = JY901.ReadWord(0x34);
   Pakage[2] = JY901.ReadWord(0x35);
   Pakage[4] = JY901.ReadWord(0x36);
 
   //第二个陀螺仪
-  Pakage[6] = 0;
+  // Pakage[6] = 0;
+  
+  if (bmi160.readStepCounter(&stepCounter)==BMI160_OK){
+    Serial.printf("fuck\r\n");
+    Serial.println(stepCounter);
+    Pakage[6] = stepCounter;
+    Pakage[7] = stepCounter>>8;
+  }
+  else
+  {
+    Pakage[6] = 0;
+    Pakage[7] = 0;
+  }
+  
   Pakage[7] = 0;
   Pakage[8] = 0;
   Pakage[9] = 0;
@@ -741,15 +760,5 @@ void PakageUdpSend(void)
   }
   // Udp.write((const uint8_t*)"OhhhFcukyouMotherFucker\r\n",25);
   Udp.endPacket();
-  if (readStep){
-    uint16_t stepCounter = 0;
-    //read step counter from hardware bmi160 
-    if (bmi160.readStepCounter(&stepCounter)==BMI160_OK){
-      // Serial.println(stepCounter);
-      Udp.write(stepCounter);
-    }
-    Udp.endPacket();
-    readStep = false;
-  }
 }
 
