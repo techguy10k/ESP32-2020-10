@@ -1,29 +1,70 @@
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-//   Arduino Library for ADS1292R 
-//   淘宝网店：scele.taobao.com
-//   公众号：电子智库
-//   技术支持微信：ethinkt
-//   测试效果：串口115200显示心率数值
-//|ads1292r pin label| Arduino Connection   |Pin Function      |
-//|----------------- |:--------------------:|-----------------:|
-//| VDD              | +5V                  |  Supply voltage  |
-//| PWDN/RESET       | D4                   |  Reset           |
-//| START            | D5                   |  Start Input     |
-//| DRDY             | D6                   |  Data Ready Outpt|
-//| CS               | D7                   |  Chip Select     |
-//| MOSI             | D11                  |  Slave In        |
-//| MISO             | D12                  |  Slave Out       |
-//| SCK              | D13                  |  Serial Clock    |
-//| GND              | Gnd                  |  Gnd             |
-//
-/////////////////////////////////////////////////////////////////////////////////////////
 #include <Arduino.h>
 #include <ads1292r.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <JY901.h>
+#include <DFRobot_BMI160.h>  //步数陀螺仪
 
+//步数陀螺仪
+DFRobot_BMI160 bmi160;
+//const int8_t i2c_addr = 0x69;
+const int8_t i2c_addr = 0x68;
+bool readStep = false;
+/*
+#if defined ARDUINO_AVR_UNO || defined ARDUINO_AVR_MEGA2560 || defined ARDUINO_AVR_PRO
+  //interrupt number of uno and mega2560 is 0
+  int pbIn = 2;
+#elif ARDUINO_AVR_LEONARDO
+  //interrupt number of uno and leonardo is 0
+  int pbIn = 3; 
+#else
+  int pbIn = 13;
+#endif
+*/
+int pbIn = 17;
+/*the bmi160 have two interrput interfaces*/
+int int1 = 1;
+int int2 = 2;
+
+void stepChange()
+{
+  //once the step conter is changed, the value can be read 
+  readStep = true;
+}
+
+void initBMI160()  //初始化
+{
+  //set and init the bmi160 i2c address  
+  while (bmi160.I2cInit(i2c_addr) != BMI160_OK){
+    Serial.println("i2c init fail");
+    delay(1000); 
+  }
+  
+  //set interrput number to int1 or int2
+  if (bmi160.setInt(int2) != BMI160_OK){
+    Serial.println("set interrput fail");
+    while(1);
+  }
+
+  //set the bmi160 mode to step counter
+  if (bmi160.setStepCounter() != BMI160_OK){
+    Serial.println("set step fail");
+    while(1);
+  }
+  
+  //set the bmi160 power model,contains:stepNormalPowerMode,stepLowPowerMode
+  if (bmi160.setStepPowerMode(bmi160.stepNormalPowerMode) != BMI160_OK){
+    Serial.println("set setStepPowerMode fail");
+    while(1);
+  }
+
+  attachInterrupt(pbIn, stepChange, FALLING);
+
+  Serial.println(pbIn);
+}
+
+
+//心率
 ads1292r ADS1292;   // define class
 
 //Packet format
@@ -162,6 +203,8 @@ void setup()
 
   JY901.StartIIC();
 
+  initBMI160();
+
   // WiFi.softAPConfig(local_IP,gateway,subnet);
   WiFi.softAP("OhhhFuckEsp32","88888888",5,0,4);
   // IPAddress my_ip=WiFi.softAPIP();
@@ -183,9 +226,7 @@ void setup()
 
 void loop()
 {
-
-
-
+  
 
   if ((digitalRead(ADS1292_DRDY_PIN)) == LOW)      // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
   {
@@ -267,7 +308,8 @@ void loop()
     // PakageTestSend();
     // PakageTcpSend();
     PakageUdpSend();
-       
+    
+
 
   }
 
@@ -699,5 +741,15 @@ void PakageUdpSend(void)
   }
   // Udp.write((const uint8_t*)"OhhhFcukyouMotherFucker\r\n",25);
   Udp.endPacket();
+  if (readStep){
+    uint16_t stepCounter = 0;
+    //read step counter from hardware bmi160 
+    if (bmi160.readStepCounter(&stepCounter)==BMI160_OK){
+      // Serial.println(stepCounter);
+      Udp.write(stepCounter);
+    }
+    Udp.endPacket();
+    readStep = false;
+  }
 }
 
