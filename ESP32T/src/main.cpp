@@ -209,6 +209,7 @@ void setup()
   ADS1292.ads1292_Init(); //initalize ADS1292 slave
 
   initBMI160();
+
   JY901.StartIIC();
 
   // WiFi.softAPConfig(local_IP,gateway,subnet);
@@ -274,10 +275,15 @@ void loop()
     }
     else
       ecg_filterout[0] = 0;
-
+    
+    
     if (millis() > time_elapsed) // update every one second
     {
-      LMT70_GetTemp();
+      // LMT70_GetTemp();
+      // for (uint8_t i = 0; i < 2; i++)
+      // {
+      //   Serial.write(ecg_filterout[i]);
+      // }
       // Udp.beginPacket("192.168.1.2",1234); //准备发送数据
       // if (leadoff_deteted == true) // lead in not connected
       // {
@@ -287,8 +293,8 @@ void loop()
       // }
       // else
       // {
-        PakageUpdate();
-        PakageTestSend();
+        // PakageUpdate();
+        // PakageTestSend();
       //   // PakageUdpSend();
       //   // PakageTcpSend();
 
@@ -300,11 +306,11 @@ void loop()
       //   //  Udp.write((const uint8_t*)("BPM"),3);
       //   //  Udp.endPacket();
       // }
-      time_elapsed += 1000;
+      time_elapsed += 10;
     }
 
-    // PakageUpdate();
-    // PakageTestSend();
+    PakageUpdate();
+    PakageTestSend();
     
     // PakageTcpSend();
     PakageUdpSend();
@@ -686,12 +692,10 @@ void PakageUpdate(void)
   
   // else
   // {
-    Pakage[6] = stepCounter;
-    Pakage[7] = stepCounter<<8;
+    Pakage[7] = stepCounter;
+    Pakage[8] = stepCounter<<8;
   // }
   
-  
-  Pakage[8] = 0;
   Pakage[9] = 0;
   Pakage[10] = 0;
   Pakage[11] = 0;
