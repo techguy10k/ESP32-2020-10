@@ -9,7 +9,6 @@
 const char *ssid = "boooooooom";
 const char *password = "000000000";
 WiFiClient client;
-WiFiServer server(8080);
 void TCPInit()
 {
   //手机热点
@@ -25,8 +24,6 @@ void TCPInit()
     Serial.print(".");
   }
   Serial.println(WiFi.localIP());
-  server.begin();
-  client = server.available();
   if(client)
   {
     if(client.connected())
@@ -196,14 +193,15 @@ uint16_t LMT70_Temp = 0;
 
 //数据封包
 //Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE1 HEARTRATE2 HEARTRATE3 HEARTRATE4  TEMP1 TEMP2
-volatile uint8_t Pakage[19] = {0x00};
+volatile uint8_t Pakage[20] = {0x00};
+uint8_t Countloop = 0;
 //loop stepcounter stepcounter 0x00 0x00 0x00 0x00 Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE ADC ADC
 
 void setup()
 {
   delay(1000);
   Serial.begin(115200);
-  TCPInit();
+  // TCPInit();
 
   //LMT70输入引脚
   pinMode(33, ANALOG);
@@ -272,8 +270,11 @@ void loop()
     if (millis() > time_elapsed) // update every one second
     {
       LMT70_GetTemp();
-      Serial.write(ecg_filterout[0]);
-      Serial.write(ecg_filterout[1]);
+      // Serial.write(ecg_filterout[0]);
+      // Serial.write(ecg_filterout[1]);
+      // PakageTcpSend();
+      PakageUpdate();
+      PakageTestSend();
       time_elapsed += 10;
     }
 
@@ -625,16 +626,40 @@ void LMT70_GetTemp(void)
 
 void PakageTestSend(void)
 {
-  for (uint8_t i = 0; i < 19; i++)
+  for (uint8_t i = 0; i < 20; i++)
   {
     Serial.write(Pakage[i]);
   }
 }
 
-// void PakageUpdate(void)
-// {
-
-// }
+void PakageUpdate(void)
+{
+  Countloop++;
+  if(Countloop >= 256)
+  {
+    Countloop = 0;
+  }
+  Pakage[0] = Countloop;
+  Pakage[1] = stepCounter;
+  Pakage[2] = stepCounter << 8;
+  Pakage[3] = 0x00;
+  Pakage[4] = 0x00;
+  Pakage[5] = 0x00;
+  Pakage[6] = 0x00;
+  Pakage[7] = JY901.ReadWord(0x34);
+  // Pakage[8] = 
+  Pakage[9] = JY901.ReadWord(0x35);
+  // Pakage[10] = 
+  Pakage[11] = JY901.ReadWord(0x36);
+  // Pakage[12] = 
+  Pakage[13] = 0x00;
+  Pakage[14] = 0x00;
+  Pakage[15] = ecg_filterout[0];
+  Pakage[16] = ecg_filterout[0] >> 8;
+  Pakage[17] = global_HeartRate;
+  Pakage[18] = LMT70_Temp;
+  Pakage[19] = LMT70_Temp >> 8;
+}
 
 
 // void PakageTcpSend(void)
