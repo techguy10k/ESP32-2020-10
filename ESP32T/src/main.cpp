@@ -9,6 +9,7 @@
 const char *ssid = "boooooooom";
 const char *password = "000000000";
 WiFiClient client;
+WiFiServer server(8080);
 void TCPInit()
 {
   //手机热点
@@ -24,6 +25,8 @@ void TCPInit()
     Serial.print(".");
   }
   Serial.println(WiFi.localIP());
+  server.begin();
+  client = server.available();
   if(client)
   {
     if(client.connected())
