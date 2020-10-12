@@ -10,6 +10,7 @@ DFRobot_BMI160 bmi160;
 //const int8_t i2c_addr = 0x69;
 const int8_t i2c_addr = 0x68;
 bool readStep = false;
+uint16_t stepCounter = 0;
 /*
 #if defined ARDUINO_AVR_UNO || defined ARDUINO_AVR_MEGA2560 || defined ARDUINO_AVR_PRO
   //interrupt number of uno and mega2560 is 0
@@ -21,7 +22,7 @@ bool readStep = false;
   int pbIn = 13;
 #endif
 */
-int pbIn = 17;
+int pbIn = 2;
 /*the bmi160 have two interrput interfaces*/
 int int1 = 1;
 int int2 = 2;
@@ -29,6 +30,7 @@ int int2 = 2;
 void stepChange()
 {
   //once the step conter is changed, the value can be read
+  stepCounter++;
   readStep = true;
 }
 
@@ -180,6 +182,8 @@ WiFiUDP Udp;
 // WiFiClient serverClients;
 
 uint16_t LMT70_Temp = 0;
+//uint8_t stepCounter[2];
+#define RequestPin 15
 
 //数据封包
 //Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE1 HEARTRATE2 HEARTRATE3 HEARTRATE4  TEMP1 TEMP2
@@ -192,6 +196,8 @@ void setup()
 
   //LMT70输入引脚
   pinMode(33, ANALOG);
+  // pinMode(RequestPin,OUTPUT);
+  // digitalWrite(RequestPin,LOW);
 
   pinMode(ADS1292_DRDY_PIN, INPUT);   //6
   pinMode(ADS1292_CS_PIN, OUTPUT);    //7
@@ -202,9 +208,8 @@ void setup()
 
   ADS1292.ads1292_Init(); //initalize ADS1292 slave
 
-  // JY901.StartIIC();
-
   initBMI160();
+  JY901.StartIIC();
 
   // WiFi.softAPConfig(local_IP,gateway,subnet);
   WiFi.softAP("OhhhFuckEsp32", "88888888", 5, 0, 4);
@@ -223,7 +228,8 @@ void setup()
 
 void loop()
 {
-
+  // digitalWrite(15,HIGH);
+  // digitalWrite(15,LOW);
   // Serial.printf("fuck\r\n");
   if ((digitalRead(ADS1292_DRDY_PIN)) == LOW) // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
   {
@@ -273,32 +279,33 @@ void loop()
     {
       LMT70_GetTemp();
       // Udp.beginPacket("192.168.1.2",1234); //准备发送数据
-      if (leadoff_deteted == true) // lead in not connected
-      {
-        // Serial.println("ECG lead error!!! ensure the leads are properly connected");
-        // Udp.write((const uint8_t*)("ECG lead error!!! ensure the leads are properly connected"),60);
-        // Udp.endPacket();
-      }
-      else
-      {
-        // PakageUpdate();
-        // PakageTestSend();
-        // PakageUdpSend();
-        // PakageTcpSend();
+      // if (leadoff_deteted == true) // lead in not connected
+      // {
+      //   // Serial.println("ECG lead error!!! ensure the leads are properly connected");
+      //   // Udp.write((const uint8_t*)("ECG lead error!!! ensure the leads are properly connected"),60);
+      //   // Udp.endPacket();
+      // }
+      // else
+      // {
+        PakageUpdate();
+        PakageTestSend();
+      //   // PakageUdpSend();
+      //   // PakageTcpSend();
 
-        //  Serial.print("Heart rate: ");
-        //  Udp.write((const uint8_t*)("Heart rate: "),12);
-        //  Serial.print(global_HeartRate);
-        //  Udp.printf("%d",global_HeartRate);
-        //  Serial.println("BPM");
-        //  Udp.write((const uint8_t*)("BPM"),3);
-        //  Udp.endPacket();
-      }
+      //   //  Serial.print("Heart rate: ");
+      //   //  Udp.write((const uint8_t*)("Heart rate: "),12);
+      //   //  Serial.print(global_HeartRate);
+      //   //  Udp.printf("%d",global_HeartRate);
+      //   //  Serial.println("BPM");
+      //   //  Udp.write((const uint8_t*)("BPM"),3);
+      //   //  Udp.endPacket();
+      // }
       time_elapsed += 1000;
     }
 
-    PakageUpdate();
-     PakageTestSend();
+    // PakageUpdate();
+    // PakageTestSend();
+    
     // PakageTcpSend();
     PakageUdpSend();
   }
@@ -644,32 +651,46 @@ void LMT70_GetTemp(void)
 
 void PakageUpdate(void)
 {
-  //uint16_t stepCounter = 0;
-
+  
   //第一个陀螺仪
-  // Pakage[0] = JY901.ReadWord(0x34);
-  // Pakage[2] = JY901.ReadWord(0x35);
-  // Pakage[4] = JY901.ReadWord(0x36);
+  Pakage[0] = JY901.ReadWord(0x34);
+  Pakage[2] = JY901.ReadWord(0x35);
+  Pakage[4] = JY901.ReadWord(0x36);
 
   //第二个陀螺仪
-  // Pakage[6] = 0;
-  if (readStep)
-  {
-    uint16_t stepCounter = 0;
-    if (bmi160.readStepCounter(&stepCounter) == BMI160_OK)
-    {
-      Pakage[6] = stepCounter;
-      Pakage[7] = stepCounter << 8;
-    }
-    readStep = false;
-  }
-  else
-  {
-    Pakage[6] = 0;
-    Pakage[7] = 0;
-  }
+  
+  // if (readStep)
+  // {
+  //   uint16_t stepCounter = 0;
+  //   if (bmi160.readStepCounter(&stepCounter) == BMI160_OK)
+  //   {
+  //     Pakage[6] = stepCounter;
+  //     Pakage[7] = stepCounter << 8;
+  //   }
+  //   readStep = false;
+  // }
+  // else
+  // {
+  //   Pakage[6] = 0;
+  //   Pakage[7] = 0;
+  // }
 
-  Pakage[7] = 0;
+  // Pakage[6] = 0;
+  // Pakage[7] = 0;
+
+  // digitalWrite(RequestPin,HIGH);
+  //   Serial.readBytes(stepCounter,2);
+  //   Pakage[6] = stepCounter[0];
+  //   Pakage[7] = stepCounter[0]<<8;
+  // digitalWrite(RequestPin,LOW);
+  
+  // else
+  // {
+    Pakage[6] = stepCounter;
+    Pakage[7] = stepCounter<<8;
+  // }
+  
+  
   Pakage[8] = 0;
   Pakage[9] = 0;
   Pakage[10] = 0;
