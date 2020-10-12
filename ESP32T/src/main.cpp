@@ -5,25 +5,44 @@
 #include <JY901.h>
 #include <DFRobot_BMI160.h> //步数陀螺仪
 
+//wifi
+const char *ssid = "boooooooom";
+const char *password = "000000000";
+WiFiClient client;
+WiFiServer server(8080);
+void TCPInit()
+{
+  //手机热点
+  IPAddress local_IP(192,168,43,23);
+  IPAddress gateway(192,168,43,1);
+  IPAddress subnet(255,255,255,0);
+  //WiFi.mode(WIFI_STA);
+  WiFi.config(local_IP, gateway, subnet);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(WiFi.localIP());
+  server.begin();
+  client = server.available();
+  if(client)
+  {
+    if(client.connected())
+    {
+      Serial.write(".");
+    }
+  }
+}
+
 //步数陀螺仪
 DFRobot_BMI160 bmi160;
-//const int8_t i2c_addr = 0x69;
 const int8_t i2c_addr = 0x68;
 bool readStep = false;
 uint16_t stepCounter = 0;
-/*
-#if defined ARDUINO_AVR_UNO || defined ARDUINO_AVR_MEGA2560 || defined ARDUINO_AVR_PRO
-  //interrupt number of uno and mega2560 is 0
-  int pbIn = 2;
-#elif ARDUINO_AVR_LEONARDO
-  //interrupt number of uno and leonardo is 0
-  int pbIn = 3; 
-#else
-  int pbIn = 13;
-#endif
-*/
+
 int pbIn = 2;
-/*the bmi160 have two interrput interfaces*/
 int int1 = 1;
 int int2 = 2;
 
@@ -33,6 +52,7 @@ void stepChange()
   stepCounter++;
   readStep = true;
 }
+
 
 void initBMI160() //初始化
 {
@@ -171,67 +191,39 @@ void LMT70_GetTemp(void);
 void PakageUpdate(void);
 void PakageTcpSend(void);
 void PakageTestSend(void);
-void PakageUdpSend(void);
-
-// IPAddress local_IP(192,168,1,1);
-// IPAddress gateway(192,168,1,1);
-// IPAddress subnet(255,255,255,0);
-
-WiFiUDP Udp;
-// WiFiServer server(8080);
-// WiFiClient serverClients;
 
 uint16_t LMT70_Temp = 0;
-//uint8_t stepCounter[2];
-#define RequestPin 15
 
 //数据封包
 //Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE1 HEARTRATE2 HEARTRATE3 HEARTRATE4  TEMP1 TEMP2
 volatile uint8_t Pakage[19] = {0x00};
+//loop stepcounter stepcounter 0x00 0x00 0x00 0x00 Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE ADC ADC
 
 void setup()
 {
   delay(1000);
-  // initalize the  data ready and chip select pins:
+  Serial.begin(115200);
+  TCPInit();
 
   //LMT70输入引脚
   pinMode(33, ANALOG);
-  // pinMode(RequestPin,OUTPUT);
-  // digitalWrite(RequestPin,LOW);
 
   pinMode(ADS1292_DRDY_PIN, INPUT);   //6
   pinMode(ADS1292_CS_PIN, OUTPUT);    //7
   pinMode(ADS1292_START_PIN, OUTPUT); //5
   pinMode(ADS1292_PWDN_PIN, OUTPUT);  //4
 
-  Serial.begin(115200); // Baudrate for serial communica
-
-  ADS1292.ads1292_Init(); //initalize ADS1292 slave
+  ADS1292.ads1292_Init(); 
 
   initBMI160();
 
   JY901.StartIIC();
-
-  // WiFi.softAPConfig(local_IP,gateway,subnet);
-  WiFi.softAP("OhhhFuckEsp32", "88888888", 5, 0, 4);
-  // IPAddress my_ip=WiFi.softAPIP();
-  // Serial.printf("%s",my_ip);
-  // server.begin();
-  //UDP部分
-  Udp.begin(2345); //启用UDP监听以接收数据
-
-  //TCP部分
-  // server.begin();
-  // server.setNoDelay(true);
 
   Serial.println("Initiliziation is done");
 }
 
 void loop()
 {
-  // digitalWrite(15,HIGH);
-  // digitalWrite(15,LOW);
-  // Serial.printf("fuck\r\n");
   if ((digitalRead(ADS1292_DRDY_PIN)) == LOW) // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
   {
     SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
@@ -279,50 +271,20 @@ void loop()
     
     if (millis() > time_elapsed) // update every one second
     {
-      // LMT70_GetTemp();
-      // for (uint8_t i = 0; i < 2; i++)
-      // {
-      //   Serial.write(ecg_filterout[i]);
-      // }
-      // Udp.beginPacket("192.168.1.2",1234); //准备发送数据
-      // if (leadoff_deteted == true) // lead in not connected
-      // {
-      //   // Serial.println("ECG lead error!!! ensure the leads are properly connected");
-      //   // Udp.write((const uint8_t*)("ECG lead error!!! ensure the leads are properly connected"),60);
-      //   // Udp.endPacket();
-      // }
-      // else
-      // {
-        // PakageUpdate();
-        // PakageTestSend();
-      //   // PakageUdpSend();
-      //   // PakageTcpSend();
-
-      //   //  Serial.print("Heart rate: ");
-      //   //  Udp.write((const uint8_t*)("Heart rate: "),12);
-      //   //  Serial.print(global_HeartRate);
-      //   //  Udp.printf("%d",global_HeartRate);
-      //   //  Serial.println("BPM");
-      //   //  Udp.write((const uint8_t*)("BPM"),3);
-      //   //  Udp.endPacket();
-      // }
+      LMT70_GetTemp();
+      Serial.write(ecg_filterout[0]);
+      Serial.write(ecg_filterout[1]);
       time_elapsed += 10;
     }
 
-    PakageUpdate();
-    PakageTestSend();
-    
+    // PakageUpdate();
+    // PakageTestSend();
     // PakageTcpSend();
-    PakageUdpSend();
+    // PakageUdpSend();
   }
 
   ads1292dataReceived = false;
   SPI_RX_Buff_Count = 0;
-
-  // PakageUpdate();
-  // PakageTestSend();
-
-  // delay(500);
 }
 
 void ECG_FilterProcess(int16_t *WorkingBuff, int16_t *CoeffBuf, int16_t *FilterOut)
@@ -655,83 +617,10 @@ void LMT70_GetTemp(void)
   //  Serial.printf("%d\r\n",LMT70_Temp);
 }
 
-void PakageUpdate(void)
-{
-  
-  //第一个陀螺仪
-  Pakage[0] = JY901.ReadWord(0x34);
-  Pakage[2] = JY901.ReadWord(0x35);
-  Pakage[4] = JY901.ReadWord(0x36);
-
-  //第二个陀螺仪
-  
-  // if (readStep)
-  // {
-  //   uint16_t stepCounter = 0;
-  //   if (bmi160.readStepCounter(&stepCounter) == BMI160_OK)
-  //   {
-  //     Pakage[6] = stepCounter;
-  //     Pakage[7] = stepCounter << 8;
-  //   }
-  //   readStep = false;
-  // }
-  // else
-  // {
-  //   Pakage[6] = 0;
-  //   Pakage[7] = 0;
-  // }
-
-  // Pakage[6] = 0;
-  // Pakage[7] = 0;
-
-  // digitalWrite(RequestPin,HIGH);
-  //   Serial.readBytes(stepCounter,2);
-  //   Pakage[6] = stepCounter[0];
-  //   Pakage[7] = stepCounter[0]<<8;
-  // digitalWrite(RequestPin,LOW);
-  
-  // else
-  // {
-    Pakage[7] = stepCounter;
-    Pakage[8] = stepCounter<<8;
-  // }
-  
-  Pakage[9] = 0;
-  Pakage[10] = 0;
-  Pakage[11] = 0;
-
-  //EGC数据
-  Pakage[12] = s32DaqVals[0]; // 4 bytes ECG data
-  Pakage[13] = s32DaqVals[0] >> 8;
-  Pakage[14] = s32DaqVals[0] >> 16;
-  Pakage[15] = s32DaqVals[0] >> 24;
-
-  //心率数据
-  Pakage[16] = global_HeartRate;
-
-  //温度ADC
-
-  Pakage[17] = LMT70_Temp;
-  Pakage[18] = LMT70_Temp >> 8;
-}
 
 // void PakageTcpSend(void)
 // {
-//   if(server.hasClient())
-//   {
-//     serverClients = server.available();
-//   }
-
-//   // if(!serverClients|| !serverClients.connected())
-//   // {
-//   //   serverClients.stop();
-//   // }
-
-//   if(serverClients.available())
-//   {
-//     serverClients.write((const char*)Pakage,19);
-//   }
-
+  
 // }
 
 void PakageTestSend(void)
@@ -742,13 +631,87 @@ void PakageTestSend(void)
   }
 }
 
-void PakageUdpSend(void)
-{
-  Udp.beginPacket("192.168.4.2", 1234); //准备发送数据
-  for (uint8_t fuck = 0; fuck < 19; fuck++)
-  {
-    Udp.write(Pakage[fuck]);
-  }
-  // Udp.write((const uint8_t*)"OhhhFcukyouMotherFucker\r\n",25);
-  Udp.endPacket();
-}
+// void PakageUpdate(void)
+// {
+
+// }
+
+
+// void PakageTcpSend(void)
+// {
+//   if(server.hasClient())
+//   {
+//     client = server.available();
+//   }
+
+//   // if(!serverClients|| !serverClients.connected())
+//   // {
+//   //   serverClients.stop();
+//   // }
+
+//   if(client.available())
+//   {
+//     client.write((const char*)Pakage,19);
+//   }
+// }
+
+
+// void PakageUpdate(void)
+// {
+  
+//   //第一个陀螺仪
+//   Pakage[0] = JY901.ReadWord(0x34);
+//   Pakage[2] = JY901.ReadWord(0x35);
+//   Pakage[4] = JY901.ReadWord(0x36);
+
+//   //第二个陀螺仪
+  
+//   // if (readStep)
+//   // {
+//   //   uint16_t stepCounter = 0;
+//   //   if (bmi160.readStepCounter(&stepCounter) == BMI160_OK)
+//   //   {
+//   //     Pakage[6] = stepCounter;
+//   //     Pakage[7] = stepCounter << 8;
+//   //   }
+//   //   readStep = false;
+//   // }
+//   // else
+//   // {
+//   //   Pakage[6] = 0;
+//   //   Pakage[7] = 0;
+//   // }
+
+//   // Pakage[6] = 0;
+//   // Pakage[7] = 0;
+
+//   // digitalWrite(RequestPin,HIGH);
+//   //   Serial.readBytes(stepCounter,2);
+//   //   Pakage[6] = stepCounter[0];
+//   //   Pakage[7] = stepCounter[0]<<8;
+//   // digitalWrite(RequestPin,LOW);
+  
+//   // else
+//   // {
+//     Pakage[7] = stepCounter;
+//     Pakage[8] = stepCounter<<8;
+//   // }
+  
+//   Pakage[9] = 0;
+//   Pakage[10] = 0;
+//   Pakage[11] = 0;
+
+//   //EGC数据
+//   Pakage[12] = s32DaqVals[0]; // 4 bytes ECG data
+//   Pakage[13] = s32DaqVals[0] >> 8;
+//   Pakage[14] = s32DaqVals[0] >> 16;
+//   Pakage[15] = s32DaqVals[0] >> 24;
+
+//   //心率数据
+//   Pakage[16] = global_HeartRate;
+
+//   //温度ADC
+
+//   Pakage[17] = LMT70_Temp;
+//   Pakage[18] = LMT70_Temp >> 8;
+// }
