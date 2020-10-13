@@ -6,14 +6,14 @@
 #include <DFRobot_BMI160.h> //步数陀螺仪
 
 //wifi
-const char *ssid = "boooooooom";
-const char *password = "000000000";
+const char *ssid = "gugugu";
+const char *password = "12345678";
+WiFiServer wifiServer(8080);
 WiFiClient client;
-WiFiServer server(8080);
 void TCPInit()
 {
   //手机热点
-  IPAddress local_IP(192,168,43,23);
+  IPAddress local_IP(192,168,43,2);
   IPAddress gateway(192,168,43,1);
   IPAddress subnet(255,255,255,0);
   //WiFi.mode(WIFI_STA);
@@ -22,18 +22,19 @@ void TCPInit()
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Serial.print("Wifi...");
   }
   Serial.println(WiFi.localIP());
-  server.begin();
-  client = server.available();
-  if(client)
-  {
-    if(client.connected())
-    {
-      Serial.write(".");
-    }
-  }
+  wifiServer.begin();
+  wifiServer.setNoDelay(true);
+  // client = wifiServer.available();
+  // if(!client)
+  // {
+  //   while(!client.connected())
+  //   {
+  //     Serial.write("client");
+  //   }
+  // }
 }
 
 //步数陀螺仪
@@ -189,7 +190,7 @@ static void QRS_check_sample_crossing_threshold(uint16_t scaled_result);
 
 void LMT70_GetTemp(void);
 void PakageUpdate(void);
-void PakageTcpSend(void);
+// void PakageTcpSend(void);
 void PakageTestSend(void);
 
 uint16_t LMT70_Temp = 0;
@@ -197,6 +198,7 @@ uint16_t LMT70_Temp = 0;
 //数据封包
 //Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE1 HEARTRATE2 HEARTRATE3 HEARTRATE4  TEMP1 TEMP2
 volatile uint8_t Pakage[20] = {0x00};
+// uint8_t Pakage[20] = {0x00};
 uint8_t Countloop = 0;
 //loop stepcounter stepcounter 0x00 0x00 0x00 0x00 Ax1 Ay1 Az1 Ax2 Ay2 Az2 EGG EGG EGG EGG HEARTRATE ADC ADC
 
@@ -204,7 +206,7 @@ void setup()
 {
   delay(1000);
   Serial.begin(115200);
-  // TCPInit();
+  TCPInit();
 
   //LMT70输入引脚
   pinMode(33, ANALOG);
@@ -225,70 +227,77 @@ void setup()
 
 void loop()
 {
-  if ((digitalRead(ADS1292_DRDY_PIN)) == LOW) // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
-  {
-    SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
+  Serial.println("wait for client...");
+  WiFiClient client = wifiServer.available();
+  if (client) {
+    while (client.connected()) {
+      if ((digitalRead(ADS1292_DRDY_PIN)) == LOW) // Sampling rate is set to 125SPS ,DRDY ticks for every 8ms
+      {
+        SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
 
-    for (i = 0; i < 9; i++)
-    {
-      SPI_RX_Buff[SPI_RX_Buff_Count++] = *(SPI_RX_Buff_Ptr + i); // store the result data in array
+        for (i = 0; i < 9; i++)
+        {
+          SPI_RX_Buff[SPI_RX_Buff_Count++] = *(SPI_RX_Buff_Ptr + i); // store the result data in array
+        }
+        ads1292dataReceived = true;
+      }
+
+      if (ads1292dataReceived == true) // process the data
+      {
+        j = 0;
+        for (i = 3; i < 9; i += 3) // data outputs is (24 status bits + 24 bits Respiration data +  24 bits ECG data)
+        {
+
+          uecgtemp = (unsigned long)(((unsigned long)SPI_RX_Buff[i + 0] << 16) | ((unsigned long)SPI_RX_Buff[i + 1] << 8) | (unsigned long)SPI_RX_Buff[i + 2]);
+          uecgtemp = (unsigned long)(uecgtemp << 8);
+          secgtemp = (signed long)(uecgtemp);
+          secgtemp = (signed long)(secgtemp >> 8);
+
+          s32DaqVals[j++] = secgtemp; //s32DaqVals[0] is Resp data and s32DaqVals[1] is ECG data
+        }
+
+        status_byte = (long)((long)SPI_RX_Buff[2] | ((long)SPI_RX_Buff[1]) << 8 | ((long)SPI_RX_Buff[0]) << 16); // First 3 bytes represents the status
+        status_byte = (status_byte & 0x0f8000) >> 15;                                                            // bit15 gives the lead status
+        LeadStatus = (unsigned char)status_byte;
+
+        if (!((LeadStatus & 0x1f) == 0))
+          leadoff_deteted = true;
+        else
+          leadoff_deteted = false;
+
+        ecg_wave_buff[0] = (int16_t)(s32DaqVals[1] >> 8); // ignore the lower 8 bits out of 24bits
+
+        if (leadoff_deteted == false)
+        {
+          ECG_ProcessCurrSample(&ecg_wave_buff[0], &ecg_filterout[0]); // filter out the line noise @40Hz cutoff 161 order
+          QRS_Algorithm_Interface(ecg_filterout[0]);                   // calculate
+        }
+        else
+          ecg_filterout[0] = 0;
+        
+        if (millis() > time_elapsed) // update every one second
+        {
+          LMT70_GetTemp();
+          // Serial.write(ecg_filterout[0]);
+          // Serial.write(ecg_filterout[1]);
+          // PakageUpdate();
+          // PakageTcpSend();
+          // PakageTestSend();
+          time_elapsed += 1000;
+        }
+        
+        // Serial.print("fuck!!!!!");
+        PakageUpdate();
+        client.write((const char*)Pakage,20);
+        PakageTestSend();
+        // PakageUdpSend();
+      }
+      ads1292dataReceived = false;
+      SPI_RX_Buff_Count = 0;
     }
-    ads1292dataReceived = true;
+    client.stop();
+    Serial.println("Lost Client Connect");
   }
-
-  if (ads1292dataReceived == true) // process the data
-  {
-    j = 0;
-    for (i = 3; i < 9; i += 3) // data outputs is (24 status bits + 24 bits Respiration data +  24 bits ECG data)
-    {
-
-      uecgtemp = (unsigned long)(((unsigned long)SPI_RX_Buff[i + 0] << 16) | ((unsigned long)SPI_RX_Buff[i + 1] << 8) | (unsigned long)SPI_RX_Buff[i + 2]);
-      uecgtemp = (unsigned long)(uecgtemp << 8);
-      secgtemp = (signed long)(uecgtemp);
-      secgtemp = (signed long)(secgtemp >> 8);
-
-      s32DaqVals[j++] = secgtemp; //s32DaqVals[0] is Resp data and s32DaqVals[1] is ECG data
-    }
-
-    status_byte = (long)((long)SPI_RX_Buff[2] | ((long)SPI_RX_Buff[1]) << 8 | ((long)SPI_RX_Buff[0]) << 16); // First 3 bytes represents the status
-    status_byte = (status_byte & 0x0f8000) >> 15;                                                            // bit15 gives the lead status
-    LeadStatus = (unsigned char)status_byte;
-
-    if (!((LeadStatus & 0x1f) == 0))
-      leadoff_deteted = true;
-    else
-      leadoff_deteted = false;
-
-    ecg_wave_buff[0] = (int16_t)(s32DaqVals[1] >> 8); // ignore the lower 8 bits out of 24bits
-
-    if (leadoff_deteted == false)
-    {
-      ECG_ProcessCurrSample(&ecg_wave_buff[0], &ecg_filterout[0]); // filter out the line noise @40Hz cutoff 161 order
-      QRS_Algorithm_Interface(ecg_filterout[0]);                   // calculate
-    }
-    else
-      ecg_filterout[0] = 0;
-    
-    
-    if (millis() > time_elapsed) // update every one second
-    {
-      LMT70_GetTemp();
-      // Serial.write(ecg_filterout[0]);
-      // Serial.write(ecg_filterout[1]);
-      // PakageTcpSend();
-      PakageUpdate();
-      PakageTestSend();
-      time_elapsed += 10;
-    }
-
-    // PakageUpdate();
-    // PakageTestSend();
-    // PakageTcpSend();
-    // PakageUdpSend();
-  }
-
-  ads1292dataReceived = false;
-  SPI_RX_Buff_Count = 0;
 }
 
 void ECG_FilterProcess(int16_t *WorkingBuff, int16_t *CoeffBuf, int16_t *FilterOut)
@@ -613,7 +622,8 @@ void LMT70_GetTemp(void)
   float n = j * 1000.0;
   float k = (-0.0000084515) * n * n + (-0.176928) * n + 204.393;
 
-  LMT70_Temp = k * 1000;
+  // LMT70_Temp = k * 1000;
+  LMT70_Temp = k * 10;
 
   // float j = m/4095.0;
   // float j = -0.2885*m/4096.0*m/4096.0+3.5889*m/4096.0+0.0891
@@ -624,6 +634,7 @@ void LMT70_GetTemp(void)
 
 // void PakageTcpSend(void)
 // {
+//   // client.write((const uint8_t*)Pakage,20);
   
 // }
 
@@ -644,7 +655,7 @@ void PakageUpdate(void)
   }
   Pakage[0] = Countloop;
   Pakage[1] = stepCounter;
-  Pakage[2] = stepCounter << 8;
+  Pakage[2] = stepCounter >> 8;
   Pakage[3] = 0x00;
   Pakage[4] = 0x00;
   Pakage[5] = 0x00;
@@ -655,10 +666,10 @@ void PakageUpdate(void)
   // Pakage[10] = 
   Pakage[11] = JY901.ReadWord(0x36);
   // Pakage[12] = 
-  Pakage[13] = 0x00;
-  Pakage[14] = 0x00;
-  Pakage[15] = ecg_filterout[0];
-  Pakage[16] = ecg_filterout[0] >> 8;
+  Pakage[13] = ecg_filterout[0];
+  Pakage[14] = ecg_filterout[0] >> 8;
+  Pakage[15] = 0x00;
+  Pakage[16] = 0x00;
   Pakage[17] = global_HeartRate;
   Pakage[18] = LMT70_Temp;
   Pakage[19] = LMT70_Temp >> 8;
